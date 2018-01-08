@@ -8,8 +8,8 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
+	"github.com/jasonsoft/napnap"
 	"github.com/kr/pty"
 )
 
@@ -22,18 +22,22 @@ var upgrader = websocket.Upgrader{
 }
 
 func handleWebsocket(w http.ResponseWriter, r *http.Request) {
+	//upgrade http to websocket
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		panic(err)
+		log.Print(err)
+		return
 	}
 
+	//set and start command
 	cmd := exec.Command("/bin/bash", "-l")
 	cmd.Env = append(os.Environ(), "TERM=xterm")
-
 	tty, err := pty.Start(cmd)
 	if err != nil {
-		panic(err)
+		log.Print(err)
+		return
 	}
+
 	defer func() {
 		cmd.Process.Kill()
 		cmd.Process.Wait()
@@ -42,35 +46,41 @@ func handleWebsocket(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	go func() {
+		//server reader and websocket writer
 		for {
-			buf := make([]byte, 1024)
-			read, err := tty.Read(buf)
+			buf := make([]byte, 4096)
+			_, err := tty.Read(buf)
 			if err != nil {
-				panic(err)
+				log.Print(err)
+				return
 			}
-			conn.WriteMessage(websocket.BinaryMessage, buf[:read])
+			conn.WriteMessage(websocket.BinaryMessage, buf)
 		}
 	}()
 
 	for {
+		//server writer and websocket reader
 		_, reader, err := conn.NextReader()
 		if err != nil {
-			panic(err)
+			log.Print(err)
+			return
 		}
 
 		_, err = io.Copy(tty, reader)
 		if err != nil {
-			panic(err)
+			log.Print(err)
+			return
 		}
 	}
 }
 
 func main() {
 	var listen = flag.String("listen", ":12345", "Host:port to listen on")
-
+	nap := napnap.New()
 	flag.Parse()
-
-	r := mux.NewRouter()
-	r.HandleFunc("/term", handleWebsocket)
-	log.Fatal(http.ListenAndServe(*listen, r))
+	router := napnap.NewRouter()
+	router.Get("/term", napnap.WrapHandler(http.HandlerFunc(handleWebsocket)))
+	nap.Use(router)
+	httpengine := napnap.NewHttpEngine(*listen)
+	log.Fatal(nap.Run(httpengine))
 }
