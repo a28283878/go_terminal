@@ -4,13 +4,11 @@ import (
 	"flag"
 	"io"
 	"log"
+	"net"
 	"net/http"
-	"os"
-	"os/exec"
 
 	"github.com/gorilla/websocket"
 	"github.com/jasonsoft/napnap"
-	"github.com/kr/pty"
 )
 
 var upgrader = websocket.Upgrader{
@@ -29,27 +27,13 @@ func handleWebsocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	//set and start command
-	cmd := exec.Command("/bin/bash", "-l")
-	cmd.Env = append(os.Environ(), "TERM=xterm")
-	tty, err := pty.Start(cmd)
-	if err != nil {
-		log.Print(err)
-		return
-	}
-
-	defer func() {
-		cmd.Process.Kill()
-		cmd.Process.Wait()
-		tty.Close()
-		conn.Close()
-	}()
+	serverConn, err := net.Dial("tcp", ":8081")
 
 	go func() {
 		//server reader and websocket writer
 		for {
 			buf := make([]byte, 4096)
-			_, err := tty.Read(buf)
+			_, err := serverConn.Read(buf)
 			if err != nil {
 				log.Print(err)
 				return
@@ -66,16 +50,17 @@ func handleWebsocket(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		_, err = io.Copy(tty, reader)
+		n, err := io.Copy(serverConn, reader)
 		if err != nil {
 			log.Print(err)
 			return
 		}
+		println(n)
 	}
 }
 
 func main() {
-	var listen = flag.String("listen", ":12345", "Host:port to listen on")
+	var listen = flag.String("listen", ":8080", "Host:port to listen on")
 	nap := napnap.New()
 	flag.Parse()
 	router := napnap.NewRouter()
