@@ -38,11 +38,19 @@ func serverConn(conn net.Conn) {
 	}()
 
 	go func() {
+		defer func() {
+			cmd.Process.Kill()
+			cmd.Process.Wait()
+			tty.Close()
+			conn.Close()
+		}()
+
 		//server reader and websocket writer
 		for {
 			_, err := io.Copy(conn, tty)
 			if err != nil {
 				log.Print(err.Error())
+				conn.Write([]byte(err.Error()))
 				return
 			}
 		}
@@ -55,6 +63,7 @@ func serverConn(conn net.Conn) {
 			_, err := conn.Read(dataTypeBuf)
 			if err != nil {
 				log.Print(err.Error())
+				conn.Write([]byte(err.Error()))
 				return
 			}
 
@@ -63,6 +72,7 @@ func serverConn(conn net.Conn) {
 				_, err := io.Copy(tty, conn)
 				if err != nil {
 					log.Print(err.Error())
+					conn.Write([]byte(err.Error()))
 					return
 				}
 			case 1:
@@ -71,6 +81,7 @@ func serverConn(conn net.Conn) {
 				err := decoder.Decode(&resizeMessage)
 				if err != nil {
 					log.Print(err.Error())
+					conn.Write([]byte(err.Error()))
 					continue
 				}
 				_, _, errno := syscall.Syscall(
@@ -81,6 +92,7 @@ func serverConn(conn net.Conn) {
 				)
 				if errno != 0 {
 					log.Print(errno.Error())
+					conn.Write([]byte(errno.Error()))
 					return
 				}
 			default:

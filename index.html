@@ -18,8 +18,7 @@
         }
 
         term = new Terminal({
-            cursorBlink: true,
-            cols: 120
+            cursorBlink: true
         });
 
         websocket.binaryType = "arraybuffer";
@@ -34,7 +33,7 @@
             });
 
             term.open(terminalContainer, true);
-            term.resize(120,30)
+            term.resize(120,30);
             websocket.onmessage = function(evt) {
                 if (evt.data instanceof ArrayBuffer) {
                     term.write(ab2str(evt.data));
@@ -44,7 +43,7 @@
             }
 
             websocket.onclose = function(evt) {
-                term.write("Session terminated");
+                term.write("\nSession terminated");
             }
 
             websocket.onerror = function(evt) {

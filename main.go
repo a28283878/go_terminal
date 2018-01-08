@@ -26,16 +26,28 @@ func handleWebsocket(w http.ResponseWriter, r *http.Request) {
 		log.Print(err)
 		return
 	}
-
+	defer conn.Close()
 	serverConn, err := net.Dial("tcp", ":8081")
+	if err != nil {
+		log.Print(err)
+		conn.WriteMessage(websocket.BinaryMessage, []byte(err.Error()))
+		return
+	}
+	defer serverConn.Close()
 
 	go func() {
+		defer func() {
+			conn.Close()
+			serverConn.Close()
+		}()
+
 		//server reader and websocket writer
 		for {
 			buf := make([]byte, 4096)
 			_, err := serverConn.Read(buf)
 			if err != nil {
 				log.Print(err)
+				conn.WriteMessage(websocket.BinaryMessage, []byte(err.Error()))
 				return
 			}
 			conn.WriteMessage(websocket.BinaryMessage, buf)
@@ -47,15 +59,16 @@ func handleWebsocket(w http.ResponseWriter, r *http.Request) {
 		_, reader, err := conn.NextReader()
 		if err != nil {
 			log.Print(err)
+			conn.WriteMessage(websocket.BinaryMessage, []byte(err.Error()))
 			return
 		}
 
-		n, err := io.Copy(serverConn, reader)
+		_, err = io.Copy(serverConn, reader)
 		if err != nil {
 			log.Print(err)
+			conn.WriteMessage(websocket.BinaryMessage, []byte(err.Error()))
 			return
 		}
-		println(n)
 	}
 }
 
